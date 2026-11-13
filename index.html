@@ -3,116 +3,198 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>UniMap - Realidad Aumentada sin Marcador</title>
-
-  <!-- Librería model-viewer de Google -->
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
-
+  <title>UniMap AR - Sin Marcador</title>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #0f172a;
+    body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; background: #000; }
+    #info {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.75);
       color: white;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 100;
+      line-height: 1.4;
     }
-
-    header {
-      padding: 16px;
-      text-align: center;
-      background: #1e293b;
-    }
-
-    header h1 {
-      margin: 0;
-      font-size: 1.3rem;
-    }
-
-    header p {
-      margin: 6px 0 0;
-      font-size: 0.9rem;
-      opacity: 0.85;
-    }
-
-    model-viewer {
-      width: 100%;
-      height: 70vh;
-      background-color: #1e293b;
-    }
-
-    .botones {
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: center;
-    }
-
-    button, .ar-button {
+    #info strong { color: #60a5fa; }
+    #botonAR {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
       background: #3b82f6;
       color: white;
       border: none;
-      padding: 14px 28px;
-      font-size: 1.1rem;
-      border-radius: 12px;
-      cursor: pointer;
+      padding: 16px 32px;
+      font-size: 18px;
       font-weight: 600;
-      width: 90%;
-      max-width: 320px;
-    }
-
-    button:active {
-      transform: scale(0.97);
-    }
-
-    .instrucciones {
-      padding: 0 20px 20px;
-      font-size: 0.9rem;
-      line-height: 1.5;
-      opacity: 0.9;
-      text-align: center;
+      border-radius: 50px;
+      z-index: 100;
+      display: none;
     }
   </style>
 </head>
 <body>
 
-  <header>
-    <h1>UniMap – Realidad Aumentada</h1>
-    <p>Coloca el edificio en cualquier superficie</p>
-  </header>
-
-  <!-- Aquí va tu modelo 3D -->
-  <model-viewer
-    src="modelos/prueba.glb"
-    alt="Edificio Univalle"
-    ar
-    ar-modes="webxr scene-viewer quick-look"
-    camera-controls
-    touch-action="pan-y"
-    shadow-intensity="1"
-    exposure="1"
-    environment-image="neutral"
-    auto-rotate
-    rotation-per-second="20deg"
-    style="width: 100%; height: 70vh;"
-  >
-    <!-- Botón personalizado de AR -->
-    <button slot="ar-button" class="ar-button">
-      Ver en Realidad Aumentada
-    </button>
-  </model-viewer>
-
-  <div class="botones">
-    <p class="instrucciones">
-      1. Toca el botón <strong>"Ver en Realidad Aumentada"</strong><br>
-      2. Apunta a una mesa, piso o pared<br>
-      3. Toca la pantalla para colocar el edificio<br>
-      4. Muévelo y rotalo con los dedos
-    </p>
+  <div id="info">
+    <strong>UniMap AR</strong><br>
+    1. Toca el botón "Iniciar AR"<br>
+    2. Apunta a una mesa o piso<br>
+    3. Toca la pantalla para colocar el edificio
   </div>
 
+  <button id="botonAR">Iniciar Realidad Aumentada</button>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+    let camera, scene, renderer;
+    let controller;
+    let reticle;          // el círculo que muestra dónde se puede colocar
+    let model = null;     // tu modelo 3D
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+
+    const info = document.getElementById('info');
+
+    init();
+    animate();
+
+    function init() {
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 40);
+
+      // Luces
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.5);
+      light.position.set(0.5, 1, 0.25);
+      scene.add(light);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(1, 2, 1);
+      scene.add(dirLight);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      // Botón AR de Three.js
+      const arButton = ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      });
+      document.body.appendChild(arButton);
+
+      // Círculo de ayuda (reticle)
+      const ringGeometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+      reticle = new THREE.Mesh(ringGeometry, ringMaterial);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      // Controlador (toque en pantalla)
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      // Cargar modelo
+      // Primero prueba con un modelo público para verificar que funciona
+      // Luego cambia la ruta por la tuya: 'modelos/PBtorreInnovacion.glb'
+      const loader = new GLTFLoader();
+      
+      // MODELO DE PRUEBA (público y liviano)
+      loader.load(
+        'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Duck/glTF-Binary/Duck.glb',
+        (gltf) => {
+          model = gltf.scene;
+          model.scale.set(0.15, 0.15, 0.15); // ajusta el tamaño
+          model.visible = false;
+          scene.add(model);
+          console.log('Modelo cargado correctamente');
+          info.innerHTML = '<strong>Modelo listo</strong><br>Toca "Start AR" y apunta a una superficie';
+        },
+        undefined,
+        (error) => {
+          console.error('Error cargando modelo:', error);
+          info.innerHTML = '<strong style="color:#f87171">Error cargando el modelo</strong><br>Revisa la consola';
+        }
+      );
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    // Cuando el usuario toca la pantalla
+    function onSelect() {
+      if (reticle.visible && model) {
+        model.visible = true;
+        model.position.setFromMatrixPosition(reticle.matrix);
+        model.quaternion.setFromRotationMatrix(reticle.matrix);
+        
+        // Un poco más arriba para que no quede enterrado
+        model.position.y += 0.05;
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render(timestamp, frame) {
+      if (frame) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const session = renderer.xr.getSession();
+
+        if (hitTestSourceRequested === false) {
+          session.requestReferenceSpace('viewer').then((refSpace) => {
+            session.requestHitTestSource({ space: refSpace }).then((source) => {
+              hitTestSource = source;
+            });
+          });
+          hitTestSourceRequested = true;
+        }
+
+        if (hitTestSource) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+  </script>
 </body>
 </html>
