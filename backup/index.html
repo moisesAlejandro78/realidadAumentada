@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>UniMap - Realidad Aumentada</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
+    .info {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.78);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 999;
+      line-height: 1.4;
+    }
+    .info strong { color: #4CC3D9; }
+  </style>
+</head>
+<body>
+
+  <div class="info">
+    <strong>UniMap – Realidad Aumentada</strong><br>
+    1. Permite el acceso a la cámara<br>
+    2. Apunta al <strong>Marcador Hiro</strong><br>
+    3. Debe aparecer el edificio 3D de Univalle
+  </div>
+
+  <a-scene
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
+    vr-mode-ui="enabled: false"
+  >
+    <!-- Marcador Hiro -->
+    <a-marker preset="hiro" emitevents="true" id="marker-hiro">
+      
+      <!-- Tu modelo 3D -->
+      <a-entity
+        gltf-model="modelos/edificiosUnivalle.glb"
+        position="0 0 0"
+        scale="0.08 0.08 0.08"
+        rotation="0 180 0"
+      ></a-entity>
+
+      <!-- Texto de ayuda (opcional) -->
+      <a-text
+        value="Edificios Univalle"
+        position="0 1.4 0"
+        align="center"
+        color="#FFFFFF"
+        width="4"
+        scale="0.7 0.7 0.7"
+      ></a-text>
+
+    </a-marker>
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    const marker = document.querySelector('#marker-hiro');
+    
+    marker.addEventListener('markerFound', () => {
+      console.log('¡Marcador Hiro detectado!');
+    });
+    
+    marker.addEventListener('markerLost', () => {
+      console.log('Marcador perdido');
+    });
+  </script>
+
+</body>
+</html>
